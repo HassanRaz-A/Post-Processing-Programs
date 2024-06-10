@@ -1,10 +1,10 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import os
-import pandas as pd # type: ignore
+import pandas as pd
 
 def on_focus_in(event):
-    """Change the text color to green on focus in."""
+    """Change the text color to black on focus in."""
     event.widget.config(fg="black")
 
 def on_focus_out(event):
@@ -15,15 +15,12 @@ def on_focus_out(event):
 def update_column_mapping(RSRP_columns, CINR_columns):
     """Update column mapping based on user input."""
     column_mapping = {}
-    
     for i, col in enumerate(RSRP_columns):
         if col:
             column_mapping[col] = f'R{i+1} CINR (0)'
-    
     for i, col in enumerate(CINR_columns):
         if col:
             column_mapping[f'R{i+1} RSRP (dBm)'] = col
-    
     return column_mapping
 
 def process_csv_files(directory, RSRP_columns, CINR_columns, RSRP_conditions, CINR_conditions):
@@ -32,7 +29,7 @@ def process_csv_files(directory, RSRP_columns, CINR_columns, RSRP_conditions, CI
     if not os.path.isdir(directory):
         messagebox.showerror("Error", "Invalid directory selected.")
         return results
-    
+
     for entry in os.scandir(directory):
         if entry.is_dir():
             results.extend(process_csv_files(entry.path, RSRP_columns, CINR_columns, RSRP_conditions, CINR_conditions))
@@ -40,22 +37,25 @@ def process_csv_files(directory, RSRP_columns, CINR_columns, RSRP_conditions, CI
             try:
                 df = pd.read_csv(entry.path)
                 column_mapping = update_column_mapping(RSRP_columns, CINR_columns)
-                
                 if any(col in df.columns for col in column_mapping.keys()):
-                    RSRP_cols = [col for col in RSRP_columns if col]
-                    CINR_cols = [col for col in CINR_columns if col]
-                    
+                    RSRP_cols = [col for col in RSRP_columns if col in df.columns]
+                    CINR_cols = [col for col in CINR_columns if col in df.columns]
+
+                    # Drop rows with missing values in the specified columns
+                    df = df.dropna(subset=RSRP_cols + CINR_cols)
+
                     df_filtered_RSRP = df[df[RSRP_cols].apply(lambda x: x >= RSRP_conditions).any(axis=1)]
                     df_filtered_CINR = df[df[CINR_cols].apply(lambda x: x >= CINR_conditions).any(axis=1)]
-                    
-                    percentage_RSRP = (len(df_filtered_RSRP) / len(df)) * 100
-                    percentage_CINR = (len(df_filtered_CINR) / len(df)) * 100
-                    
-                    results.append({'File': entry.name, 'RSRP': percentage_RSRP, 'CINR': percentage_CINR})
+
+                    percentage_RSRP = round((len(df_filtered_RSRP) / len(df)) * 100) if len(df) > 0 else 0
+                    percentage_CINR = round((len(df_filtered_CINR) / len(df)) * 100) if len(df) > 0 else 0
+
+                    results.append({'File': entry.name, 'RSRP': f"{percentage_RSRP}%", 'CINR': f"{percentage_CINR}%"})
             except Exception as e:
                 messagebox.showwarning("Warning", f"Error processing {entry.name}: {str(e)}")
-    
+
     return results
+
 
 def run_analysis():
     """Run the analysis based on user inputs."""
@@ -65,7 +65,6 @@ def run_analysis():
             RSRP_columns = [RSRP1_entry.get(), RSRP2_entry.get(), RSRP3_entry.get()]
             CINR_columns = [CINR1_entry.get(), CINR2_entry.get(), CINR3_entry.get()]
             
-            # Handle conditions
             RSRP_conditions = None
             CINR_conditions = None
             
@@ -91,89 +90,6 @@ def run_analysis():
         except Exception as e:
             messagebox.showerror("Error", f"An error occurred: {str(e)}")
 
-# Create the main application window
-root = tk.Tk()
-root.title("DTS_Software")
-
-root.configure(background="#000")
-
-# Main section frame
-section_frame = tk.Frame(root, bg="#000")
-section_frame.pack(fill=tk.BOTH, expand=True)
-
-# Animated gradient background
-
-# Create a frame for layout
-frame = tk.Frame(root, padx=120, pady=100, bg="#e1d0ba", highlightbackground="#000")
-root.title("DTS")
-frame.pack()
-
-signin_frame = tk.Frame(section_frame, bg="#000", bd=0)
-signin_frame.place(relx=0.5, rely=0.2, anchor=tk.CENTER)
-
-# Content frame inside signin_frame
-content_frame = tk.Frame(signin_frame, bg="#000")
-content_frame.pack(pady=40)
-
-# Header
-header_label = tk.Label(content_frame, text="DTS", font=("Chiller",180, "bold"), bg="#000", fg="#e1d0ba")
-header_label.pack(pady=20)
-
-# Labels and Entries for RSRP columns and conditions
-RSRP_label = tk.Label(frame, text="RSRP Columns:", bg="#e1d0ba", font=('Helvetica Bold', 12))
-RSRP_label.grid(row=0, column=0, padx=10, pady=5)
-
-RSRP1_entry = tk.Entry(frame, bg="lightgray")
-RSRP1_entry.grid(row=1, column=1, padx=5, pady=5)
-RSRP1_entry.bind("<FocusIn>", on_focus_in)
-RSRP1_entry.bind("<FocusOut>", on_focus_out)
-
-RSRP2_entry = tk.Entry(frame, bg="lightgray")
-RSRP2_entry.grid(row=2, column=1, padx=5, pady=5)
-
-RSRP2_entry.bind("<FocusIn>", on_focus_in)
-RSRP2_entry.bind("<FocusOut>", on_focus_out)
-
-RSRP3_entry = tk.Entry(frame, bg="lightgray")
-RSRP3_entry.grid(row=3, column=1, padx=5, pady=5)
-RSRP3_entry.bind("<FocusIn>", on_focus_in)
-RSRP3_entry.bind("<FocusOut>", on_focus_out)
-
-RSRP_condition_label = tk.Label(frame, text="RSRP Condition:",bg="#e1d0ba",font=('Helvetica Bold', 12))
-RSRP_condition_label.grid(row=7, column=0, padx=10, pady=5)
-
-
-RSRP_condition_entry = tk.Entry(frame, bg="lightgray")
-RSRP_condition_entry.grid(row=7, column=1, padx=10, pady=5)
-
-# Labels and Entries for CINR columns and conditions
-CINR_label = tk.Label(frame, text="CINR Columns:",bg="#e1d0ba",font=('Helvetica Bold', 12))
-CINR_label.grid(row=0, column=2, padx=10, pady=5)
-
-CINR1_entry = tk.Entry(frame, bg="lightgray")
-CINR1_entry.grid(row=1, column=3, padx=5, pady=5)
-CINR1_entry.bind("<FocusIn>", on_focus_in)
-CINR1_entry.bind("<FocusOut>", on_focus_out)
-
-CINR2_entry = tk.Entry(frame, bg="lightgray")
-CINR2_entry.grid(row=2, column=3, padx=5, pady=5)
-CINR2_entry.bind("<FocusIn>", on_focus_in)
-CINR2_entry.bind("<FocusOut>", on_focus_out)
-
-CINR3_entry = tk.Entry(frame, bg="lightgray")
-CINR3_entry.grid(row=3, column=3, padx=5, pady=5)
-CINR3_entry.bind("<FocusIn>", on_focus_in)
-CINR3_entry.bind("<FocusOut>", on_focus_out)
-
-CINR_condition_label = tk.Label(frame, text="CINR Condition:",bg="#e1d0ba",font=('Helvetica Bold', 12))
-CINR_condition_label.grid(row=7, column=2, padx=10, pady=5)
-
-CINR_condition_entry = tk.Entry(frame, bg="lightgray")
-CINR_condition_entry.grid(row=7, column=3, padx=10, pady=5)
-
-# Create a button to run the analysis
-
-
 def exit_application():
     """Exit the application."""
     root.destroy()
@@ -186,6 +102,70 @@ def on_leave(event, button):
     """Restore button appearance when mouse leaves."""
     button.config(bg="#e1d0ba", fg="#000")
 
+def refresh_interface():
+    """Refresh the interface."""
+    RSRP1_entry.set('')
+    RSRP2_entry.set('')
+    RSRP3_entry.set('')
+    CINR1_entry.set('')
+    CINR2_entry.set('')
+    CINR3_entry.set('')
+    RSRP_condition_entry.set('')
+    CINR_condition_entry.set('')
+
+# Predefined column names and conditions
+predefined_rsrp_columns = ['R0 RSRP (0)', 'R0 RSRP (1)', 'SSB_RP (0)', 'SSB_RP (1)']
+predefined_cinr_columns = ['R0 RS CINR (0)', 'SSB_CINR (0)']
+predefined_conditions_rsrp = [str(i) for i in range(-120, -60, 5)]  # Example conditions for RSRP
+predefined_conditions_cinr = [str(i) for i in range(1, 11)]  # Predefined conditions for CINR (1 to 10)
+
+# Create the main application window
+root = tk.Tk()
+root.title("DTS_Software")
+root.configure(background="#000")
+
+# Create a frame for layout
+frame = tk.Frame(root, padx=120, pady=100, bg="#e1d0ba", highlightbackground="#000")
+frame.pack()
+
+# Labels and Comboboxes for RSRP columns and conditions
+RSRP_label = tk.Label(frame, text="RSRP Columns:", bg="#e1d0ba", font=('Helvetica Bold', 12))
+RSRP_label.grid(row=0, column=0, padx=10, pady=5)
+
+RSRP1_entry = ttk.Combobox(frame, values=predefined_rsrp_columns)
+RSRP1_entry.grid(row=1, column=1, padx=5, pady=5)
+
+RSRP2_entry = ttk.Combobox(frame, values=predefined_rsrp_columns)
+RSRP2_entry.grid(row=2, column=1, padx=5, pady=5)
+
+RSRP3_entry = ttk.Combobox(frame, values=predefined_rsrp_columns)
+RSRP3_entry.grid(row=3, column=1, padx=5, pady=5)
+
+RSRP_condition_label = tk.Label(frame, text="RSRP Condition:", bg="#e1d0ba", font=('Helvetica Bold', 12))
+RSRP_condition_label.grid(row=7, column=0, padx=10, pady=5)
+
+RSRP_condition_entry = ttk.Combobox(frame, values=predefined_conditions_rsrp)
+RSRP_condition_entry.grid(row=7, column=1, padx=10, pady=5)
+
+# Labels and Comboboxes for CINR columns and conditions
+CINR_label = tk.Label(frame, text="CINR Columns:", bg="#e1d0ba", font=('Helvetica Bold', 12))
+CINR_label.grid(row=0, column=2, padx=10, pady=5)
+
+CINR1_entry = ttk.Combobox(frame, values=predefined_cinr_columns)
+CINR1_entry.grid(row=1, column=3, padx=5, pady=5)
+
+CINR2_entry = ttk.Combobox(frame, values=predefined_cinr_columns)
+CINR2_entry.grid(row=2, column=3, padx=5, pady=5)
+
+CINR3_entry = ttk.Combobox(frame, values=predefined_cinr_columns)
+CINR3_entry.grid(row=3, column=3, padx=5, pady=5)
+
+CINR_condition_label = tk.Label(frame, text="CINR Condition:", bg="#e1d0ba", font=('Helvetica Bold', 12))
+CINR_condition_label.grid(row=7, column=2, padx=10, pady=5)
+
+CINR_condition_entry = ttk.Combobox(frame, values=predefined_conditions_cinr)
+CINR_condition_entry.grid(row=7, column=3, padx=10, pady=5)
+
 # Run Button
 run_button = tk.Button(frame, text="Run Analysis", command=run_analysis,
                        bg="#e1d0ba", fg="#000",
@@ -194,20 +174,6 @@ run_button = tk.Button(frame, text="Run Analysis", command=run_analysis,
 run_button.grid(row=10, column=1, columnspan=2, padx=10, pady=10)
 run_button.bind("<Enter>", lambda event, btn=run_button: on_hover(event, btn))
 run_button.bind("<Leave>", lambda event, btn=run_button: on_leave(event, btn))
-
-def refresh_interface():
-    """Refresh the interface."""
-    # Clear all the entry fields
-    RSRP1_entry.delete(0, tk.END)
-    RSRP2_entry.delete(0, tk.END)
-    RSRP3_entry.delete(0, tk.END)
-    
-    CINR1_entry.delete(0, tk.END)
-    CINR2_entry.delete(0, tk.END)
-    CINR3_entry.delete(0, tk.END)
-    
-    RSRP_condition_entry.delete(0, tk.END)
-    CINR_condition_entry.delete(0, tk.END)
 
 # Refresh Button
 refresh_button = tk.Button(frame, text="Refresh", command=refresh_interface,
@@ -229,3 +195,4 @@ exit_button.bind("<Leave>", lambda event, btn=exit_button: on_leave(event, btn))
 
 # Run the Tkinter event loop
 root.mainloop()
+
