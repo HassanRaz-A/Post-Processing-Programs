@@ -3,8 +3,11 @@ import shutil
 import sys
 import itertools
 import re
-from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QLineEdit, QPushButton, QMessageBox, QTextEdit, QFileDialog, QCheckBox
+from PyQt5.QtWidgets import (QApplication, QWidget, QLabel, QLineEdit, QPushButton, 
+                             QMessageBox, QTextEdit, QFileDialog, QCheckBox, QComboBox, QListWidget,
+                             QVBoxLayout, QHBoxLayout)
 from PyQt5.QtGui import QFont
+from pandas import read_csv
 
 class MainWindow(QWidget):
     def __init__(self):
@@ -94,24 +97,51 @@ class MainWindow(QWidget):
 
         # Log
         log_label = QLabel('Log:', self)
-        log_label.setGeometry(540, 230, 250, 30)
+        log_label.setGeometry(540, 340, 250, 30)
         log_label.setFont(QFont('Helvetica Bold', 12))
         self.log_text = QTextEdit(self)
-        self.log_text.setGeometry(420, 275, 500, 420)
+        self.log_text.setGeometry(375, 390, 450, 320)
 
         # Original File Names
         original_names_label = QLabel('Original File Names:', self)
-        original_names_label.setGeometry(10, 230, 250, 30)
+        original_names_label.setGeometry(10, 340, 250, 30)
         original_names_label.setFont(QFont('Helvetica Bold', 12))
         self.original_names_text = QTextEdit(self)
-        self.original_names_text.setGeometry(10, 275, 400, 420)
+        self.original_names_text.setGeometry(10, 390, 350, 320)
 
         # Desired New Names
         new_names_label = QLabel('Desired New Names:', self)
-        new_names_label.setGeometry(980, 230, 250, 30)
+        new_names_label.setGeometry(980, 340, 250, 30)
         new_names_label.setFont(QFont('Helvetica Bold', 12))
         self.new_names_text = QTextEdit(self)
-        self.new_names_text.setGeometry(930, 275, 400, 420)
+        self.new_names_text.setGeometry(840, 390, 350, 320)
+
+        # Clean Missing Values
+       
+
+        self.column_selection_label = QLabel('Columns to Clean:', self)
+        self.column_selection_label.setGeometry(10, 240, 200, 30)
+        self.column_selection_label.setFont(QFont('Helvetica Bold', 12))
+        self.column_selection_var = QComboBox(self)
+        self.column_selection_var.setGeometry(150, 240, 300, 30)
+        self.column_selection_var.currentIndexChanged.connect(self.addSelectedColumn)
+
+        self.selected_columns_label = QLabel('', self)
+        self.selected_columns_label.setGeometry(320, 280, 200, 30)
+        self.selected_columns_label.setFont(QFont('Helvetica Bold', 12))
+        self.selected_columns_list = QListWidget(self)
+        self.selected_columns_list.setGeometry(450, 240, 300, 60)
+
+        self.remove_column_button = QPushButton('Remove', self)
+        self.remove_column_button.setGeometry(760, 240, 80, 30)
+        self.remove_column_button.clicked.connect(self.removeSelectedColumn)
+
+        # Desired Value Selection
+        desired_value_label = QLabel('Desired Value:', self)
+        desired_value_label.setGeometry(10, 280, 150, 30)
+        desired_value_label.setFont(QFont('Helvetica Bold', 12))
+        self.desired_value_var = QLineEdit(self)
+        self.desired_value_var.setGeometry(150, 280, 200, 30)
 
         # Buttons
         copy_button = QPushButton('Copy CSV', self)
@@ -125,6 +155,10 @@ class MainWindow(QWidget):
         rename_button = QPushButton('Rename CSV', self)
         rename_button.setGeometry(1040, 730, 100, 30)
         rename_button.clicked.connect(self.renameCSVFilesInFolders)
+
+        # Populate columns in combobox
+        columns = ['Longitude', 'Latitude', 'RSSI (0)', 'R0 RSRP (0)', 'R0 RS CINR (0)', 'Cell ID (0)']
+        self.column_selection_var.addItems(columns)
 
     def browseSource(self):
         folder_path = QFileDialog.getExistingDirectory(self, 'Select Source Root Folder')
@@ -174,16 +208,30 @@ class MainWindow(QWidget):
 
         file_extension = '.csv' if self.file_type_csv.isChecked() else '.xlsx'
 
-        for folder_name in os.listdir(source_root_folder):
-            folder_path = os.path.join(source_root_folder, folder_name)
-            if os.path.isdir(folder_path):
-                csv_files = [f for f in os.listdir(folder_path) if f.endswith('.csv')]
-                if len(csv_files) == 1:
-                    csv_file_path = os.path.join(folder_path, csv_files[0])
-                    new_file_name = f"{folder_name}_data{file_extension}"
-                    destination_file_path = os.path.join(destination_folder, new_file_name)
-                    shutil.copyfile(csv_file_path, destination_file_path)
-                    self.log_text.append(f"File '{csv_file_path}' copied and renamed to '{new_file_name}'.")
+        try:
+            columns_to_clean = self.getColumnsToClean()
+            desired_value = self.desired_value_var.text()
+
+            for folder_name in os.listdir(source_root_folder):
+                folder_path = os.path.join(source_root_folder, folder_name)
+                if os.path.isdir(folder_path):
+                    csv_files = [f for f in os.listdir(folder_path) if f.endswith('.csv')]
+                    if len(csv_files) == 1:
+                        csv_file_path = os.path.join(folder_path, csv_files[0])
+                        new_file_name = f"{folder_name}_data{file_extension}"
+                        destination_file_path = os.path.join(destination_folder, new_file_name)
+                        
+                        df = read_csv(csv_file_path)
+                        for column in columns_to_clean:
+                            if desired_value == "missing":
+                                df = df.dropna(subset=[column])
+                            else:
+                                df[column] = df[column].replace(desired_value, float('nan'))
+                        df.to_csv(destination_file_path, index=False)
+                        
+                        self.log_text.append(f"File '{csv_file_path}' copied and cleaned values for selected columns, then saved as '{new_file_name}'.")
+        except Exception as e:
+            self.log_text.append(f"An error occurred while copying and cleaning CSV files: {e}")
 
     def createAndRenameFolders(self):
         source_dir = self.source_directory_var.text()
@@ -258,6 +306,21 @@ class MainWindow(QWidget):
                         self.log_text.append(f"File '{file_name}' renamed to '{new_file_name}'.")
                     except Exception as e:
                         self.log_text.append(f"Failed to rename '{file_name}' to '{new_file_name}': {e}")
+
+    def addSelectedColumn(self):
+        column = self.column_selection_var.currentText()
+        self.selected_columns_list.addItem(column)
+
+    def removeSelectedColumn(self):
+        selected_items = self.selected_columns_list.selectedItems()
+        for item in selected_items:
+            self.selected_columns_list.takeItem(self.selected_columns_list.row(item))
+
+    def getColumnsToClean(self):
+        columns_to_clean = []
+        for index in range(self.selected_columns_list.count()):
+            columns_to_clean.append(self.selected_columns_list.item(index).text())
+        return columns_to_clean
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
