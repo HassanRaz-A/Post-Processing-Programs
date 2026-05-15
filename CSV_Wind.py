@@ -100,7 +100,7 @@ csv_checkbox.grid(row=5, column=2, sticky="nw")
 excel_var = tk.BooleanVar()
 excel_checkbox = Checkbutton(root,bg="#e1d0ba", text="Excel", variable=excel_var, font=('Helvetica Bold', 12))
 excel_checkbox.grid(row=5, column=2, sticky="ne")
-
+ 
 
 # Files Listbox
 files_label = tk.Label(root,bg="#e1d0ba", text="Files:", font=('Helvetica Bold', 12))
